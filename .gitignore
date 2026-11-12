@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local runtime state (approvals, audit log, action sink) and eval reports
+.local/
+reports/
+
+# Environment files: never commit real values
+.env
+.env.*
+!.env.example
+
+# Bicep build output
+infra/**/*.json
+!infra/**/*.parameters.json
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
