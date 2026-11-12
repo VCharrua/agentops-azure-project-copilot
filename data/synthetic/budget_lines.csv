@@ -1,0 +1,19 @@
+project_id,cost_code,description,budget_eur,actual_eur,committed_eur,forecast_eur
+PRJ-001,01-SUB,Substructure and foundations,2100000,2180000,2180000,2180000
+PRJ-001,02-STR,Concrete structure,5600000,3950000,5900000,6272000
+PRJ-001,03-ENV,Facade and envelope,3200000,410000,2900000,3150000
+PRJ-001,04-MEP,"Mechanical, electrical and plumbing",4100000,620000,3300000,4180000
+PRJ-001,05-FIT,Interior fit-out,2300000,0,450000,2300000
+PRJ-001,06-PRE,Preliminaries and site running costs,1100000,640000,900000,1265000
+PRJ-002,01-SUB,Groundworks and slab,1900000,1870000,1870000,1870000
+PRJ-002,02-STL,Structural steel,3400000,1200000,3350000,3468000
+PRJ-002,03-ENV,Cladding and roofing,1850000,150000,1700000,1800000
+PRJ-002,04-MEP,"Mechanical, electrical and plumbing",1500000,180000,1100000,1470000
+PRJ-002,05-EXT,External works and yard,700000,60000,300000,700000
+PRJ-002,06-PRE,Preliminaries and site running costs,400000,210000,330000,412000
+PRJ-003,01-DEM,Demolition and strip-out,380000,395000,395000,395000
+PRJ-003,02-HAZ,Hazardous materials abatement,120000,240000,305000,305000
+PRJ-003,03-STR,Structural repairs,650000,480000,640000,655000
+PRJ-003,04-MEP,"Mechanical, electrical and plumbing",1450000,700000,1380000,1460000
+PRJ-003,05-FIT,Classroom fit-out,1250000,310000,1100000,1240000
+PRJ-003,06-PRE,Preliminaries and site running costs,350000,200000,300000,360000

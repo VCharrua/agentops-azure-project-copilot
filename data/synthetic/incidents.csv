@@ -1,0 +1,4 @@
+incident_id,project_id,date,severity,status,description
+INC-0041,PRJ-002,2026-09-09,medium,open,Near miss: forklift reversed across the pedestrian route at Gate B.
+INC-0038,PRJ-001,2026-09-08,medium,closed,Tower crane TC-2 slewing gear failure; crane taken out of service.
+INC-0035,PRJ-003,2026-07-29,high,closed,Asbestos insulating board discovered above Block B corridor ceilings.

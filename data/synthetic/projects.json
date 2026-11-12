@@ -1,0 +1,36 @@
+{
+  "company": "Alvora Construction",
+  "reporting_date": "2026-09-25",
+  "projects": [
+    {
+      "project_id": "PRJ-001",
+      "name": "Riverside Residential Tower",
+      "client": "Calder Housing Trust",
+      "contract_value_eur": 18400000,
+      "start_date": "2026-01-12",
+      "planned_completion": "2027-06-30",
+      "project_manager": "Marta Reis",
+      "site_manager": "Tomas Lindqvist"
+    },
+    {
+      "project_id": "PRJ-002",
+      "name": "Harbor Logistics Warehouse",
+      "client": "Brightquay Freight Ltd",
+      "contract_value_eur": 9750000,
+      "start_date": "2026-03-02",
+      "planned_completion": "2026-12-18",
+      "project_manager": "Daniel Okafor",
+      "site_manager": "Ines Carvalho"
+    },
+    {
+      "project_id": "PRJ-003",
+      "name": "Maple Street School Renovation",
+      "client": "Westmoor Municipal Council",
+      "contract_value_eur": 4200000,
+      "start_date": "2026-06-22",
+      "planned_completion": "2026-11-27",
+      "project_manager": "Sofia Almeida",
+      "site_manager": "Peter Novak"
+    }
+  ]
+}
