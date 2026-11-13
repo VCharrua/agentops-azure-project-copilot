@@ -41,6 +41,7 @@ RUN apt-get update \
     && /usr/local/bin/python -m pip uninstall --yes setuptools msgpack urllib3 \
     && echo "Dependency refresh: ${DEPENDENCY_REFRESH}"
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin copilot
+RUN pip install --upgrade pip setuptools msgpack urllib3
 WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 # The synthetic dataset ships in the image: structured data is read from it in every mode, and the
