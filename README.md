@@ -12,6 +12,8 @@ approves them**. Around it sit the things that decide whether an agent can be op
 test, automated evaluation with quality gates, security scanning, infrastructure as code, and
 promotion of one image through dev, staging and production with rollback.
 
+
+
 > **Status, stated plainly.** Everything in this repository runs and is tested locally with mocked
 > Azure services. The Azure paths (Bicep, the Azure adapters, the deployment workflows) compile,
 > lint and are unit-tested against fakes, but have **not yet been validated on Azure**. Nothing here
@@ -19,6 +21,10 @@ promotion of one image through dev, staging and production with rollback.
 >
 > All data is synthetic. "Alvora Construction", its clients, people and projects are invented, and
 > this is not a client project.
+>
+> This project is a variant of an earlier project developed for and deployed in production by a
+> real construction company, whose objective was to test and evaluate the performance of AI
+> optimizations made by Claude Code agents using the Fable 5.2 model.
 
 ## Architecture
 
