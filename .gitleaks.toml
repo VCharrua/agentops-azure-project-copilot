@@ -1,0 +1,12 @@
+# Gitleaks configuration: the default rule set plus one narrow allowlist.
+[extend]
+useDefault = true
+
+# Azure built-in role definition ids are public, well-known GUIDs (the same in every tenant), not
+# secrets. Only variables named "...RoleId" inside Bicep files are exempt.
+[[allowlists]]
+description = "Azure built-in role definition ids in Bicep"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^infra/.*\.bicep$''']
+regexes = ['''var \w+RoleId = '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}'$''']
