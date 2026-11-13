@@ -1,6 +1,6 @@
 # Project Delivery Copilot: an Azure AI agent with full CI/CD
 
-[![CI](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/ci.yml)
+[![CI](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/ci.yml/badge.svg?repository=main)](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/ci.yml)
 [![Agent evals](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/agent-evals.yml/badge.svg)](https://github.com/VCharrua/agentops-azure-project-copilot/actions/workflows/agent-evals.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
