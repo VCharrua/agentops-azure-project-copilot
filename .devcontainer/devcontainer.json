@@ -1,0 +1,28 @@
+{
+  "name": "project-delivery-copilot",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": { "installBicep": true },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "pip install -e '.[dev,azure]' && make check",
+  "forwardPorts": [8000],
+  "containerEnv": { "COPILOT_MODE": "local" },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker",
+        "ms-azuretools.vscode-bicep",
+        "github.vscode-github-actions"
+      ],
+      "settings": {
+        "python.testing.pytestEnabled": true,
+        "editor.formatOnSave": true,
+        "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" }
+      }
+    }
+  }
+}

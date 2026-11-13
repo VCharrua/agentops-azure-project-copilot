@@ -1,0 +1,14 @@
+project_id,milestone,baseline_date,forecast_date,status
+PRJ-001,Foundations complete,2026-04-30,2026-05-08,done
+PRJ-001,Level 9 slab poured,2026-09-11,2026-10-02,delayed
+PRJ-001,Structure topped out,2026-12-18,2027-01-15,at_risk
+PRJ-001,Facade watertight,2027-03-12,2027-03-26,at_risk
+PRJ-001,Practical completion,2027-06-30,2027-07-14,at_risk
+PRJ-002,Slab complete,2026-05-29,2026-05-27,done
+PRJ-002,Steel frame erected,2026-08-14,2026-09-04,done
+PRJ-002,Building weathertight,2026-10-09,2026-10-23,at_risk
+PRJ-002,Practical completion,2026-12-18,2026-12-18,on_track
+PRJ-003,Strip-out complete,2026-07-17,2026-07-31,done
+PRJ-003,Abatement clearance certificate,2026-08-07,2026-08-28,done
+PRJ-003,Block A classrooms handover,2026-09-04,2026-09-18,done
+PRJ-003,Practical completion,2026-11-27,2026-12-11,at_risk

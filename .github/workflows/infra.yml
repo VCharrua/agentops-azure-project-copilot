@@ -1,0 +1,71 @@
+name: Infrastructure
+
+# Manual infrastructure deployment for one environment: always a what-if first, then (optionally)
+# the deployment. Use it to bootstrap an environment before the first CD run and for
+# infrastructure-only changes. The running container image is preserved.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      action:
+        description: what-if only previews; deploy applies after the preview
+        type: choice
+        options: [what-if, deploy]
+        default: what-if
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  infra:
+    name: ${{ inputs.action }} (${{ inputs.environment }})
+    if: vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_DEPLOYER_OBJECT_ID: ${{ vars.AZURE_DEPLOYER_OBJECT_ID }}
+      BUDGET_CONTACT_EMAILS: ${{ vars.BUDGET_CONTACT_EMAILS }}
+      BUDGET_START_DATE: ${{ vars.BUDGET_START_DATE }}
+      ENTRA_AUTH_CLIENT_ID: ${{ vars.ENTRA_AUTH_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: What-if
+        run: |
+          set -o pipefail
+          bash scripts/ci/deploy_infra.sh "$ENVIRONMENT" what-if | tee what-if.txt
+          {
+            echo "## What-if (${ENVIRONMENT})"
+            echo '```'
+            head -c 60000 what-if.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Deploy
+        if: inputs.action == 'deploy'
+        run: |
+          bash scripts/ci/deploy_infra.sh "$ENVIRONMENT" create > outputs.json
+          {
+            echo "## Deployed (${ENVIRONMENT})"
+            echo '```json'
+            jq 'map_values(.value)' outputs.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
