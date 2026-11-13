@@ -1,0 +1,15 @@
+# Every change needs a review from an owner. Paths that carry safety or deployment controls are
+# listed explicitly so they stay protected if more owners are added later.
+
+*                            @VCharrua
+
+# Safety controls: the approval gate, guardrails, agent instructions and evaluation thresholds
+/src/copilot/approvals/      @VCharrua
+/src/copilot/guardrails/     @VCharrua
+/src/copilot/agent/          @VCharrua
+/evals/                      @VCharrua
+
+# Infrastructure and pipelines
+/infra/                      @VCharrua
+/.github/                    @VCharrua
+/scripts/ci/                 @VCharrua
