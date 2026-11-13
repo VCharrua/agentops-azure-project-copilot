@@ -142,7 +142,10 @@ jobs:
           context: .
           load: true
           tags: project-delivery-copilot:ci
-          build-args: APP_VERSION=${{ github.sha }}
+          pull: true
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            DEPENDENCY_REFRESH=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Trivy scan (fails on fixable HIGH or CRITICAL vulnerabilities)

@@ -64,7 +64,10 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.registry.outputs.name }}.azurecr.io/project-delivery-copilot:${{ github.sha }}
-          build-args: APP_VERSION=${{ github.sha }}
+          pull: true
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            DEPENDENCY_REFRESH=${{ github.run_id }}
           provenance: true
           sbom: true
           cache-from: type=gha

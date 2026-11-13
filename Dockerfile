@@ -4,9 +4,11 @@
 FROM python:3.15-slim AS build
 
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+ARG DEPENDENCY_REFRESH
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "Dependency refresh: ${DEPENDENCY_REFRESH}"
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -20,6 +22,7 @@ RUN pip install --upgrade pip setuptools msgpack urllib3 \
 FROM python:3.15-slim AS runtime
 
 ARG APP_VERSION=dev
+ARG DEPENDENCY_REFRESH
 LABEL org.opencontainers.image.title="project-delivery-copilot" \
       org.opencontainers.image.description="Project Delivery Copilot API (synthetic data reference implementation)" \
       org.opencontainers.image.licenses="MIT" \
@@ -35,7 +38,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
-    && /usr/local/bin/python -m pip uninstall --yes setuptools msgpack urllib3
+    && /usr/local/bin/python -m pip uninstall --yes setuptools msgpack urllib3 \
+    && echo "Dependency refresh: ${DEPENDENCY_REFRESH}"
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin copilot
 WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
