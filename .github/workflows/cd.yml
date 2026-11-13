@@ -1,0 +1,130 @@
+name: CD
+
+# Build once, promote the same image digest: dev -> (live evals) -> staging -> prod.
+#
+#   * Authentication to Azure is OIDC federation per GitHub Environment. No stored credentials.
+#   * staging and prod are GitHub Environments; prod has required reviewers (docs/branch-protection.md).
+#   * Each environment has its own registry; promotion is `az acr import` by digest, so prod never
+#     depends on the dev registry at runtime and the bytes that ran in staging are the bytes in prod.
+#   * Every deployment is followed by a smoke test; a failure redeploys the previous image.
+#
+# The workflow is inert until the repository variable AZURE_DEPLOY_ENABLED is set to 'true'
+# (see docs/azure-setup.md), so a fresh clone or fork has a green pipeline without any cloud.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and push image
+    if: vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      registry: ${{ steps.registry.outputs.name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Registry login (Entra ID token)
+        id: registry
+        run: |
+          name="$(az acr list --resource-group rg-pdc-dev --query '[0].name' --output tsv)"
+          if [[ -z "$name" ]]; then
+            echo "::error::No registry in rg-pdc-dev. Run the 'Infrastructure' workflow for dev first."
+            exit 1
+          fi
+          az acr login --name "$name"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.registry.outputs.name }}.azurecr.io/project-delivery-copilot:${{ github.sha }}
+          build-args: APP_VERSION=${{ github.sha }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Trivy gate on the pushed image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.registry.outputs.name }}.azurecr.io/project-delivery-copilot@${{ steps.push.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: echo "Built \`project-delivery-copilot@${DIGEST}\` from \`${GITHUB_SHA}\`." >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-dev:
+    name: Dev
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: dev
+      digest: ${{ needs.build.outputs.digest }}
+      source-registry: ${{ needs.build.outputs.registry }}
+
+  evals-dev:
+    name: Live evals gate
+    needs: deploy-dev
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/agent-evals.yml
+    with:
+      tier: live
+
+  deploy-staging:
+    name: Staging
+    needs: [build, evals-dev]
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: staging
+      digest: ${{ needs.build.outputs.digest }}
+      source-registry: ${{ needs.build.outputs.registry }}
+
+  deploy-prod:
+    name: Production
+    # The prod GitHub Environment has required reviewers: this job waits for a human approval.
+    needs: [build, deploy-staging]
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: prod
+      digest: ${{ needs.build.outputs.digest }}
+      source-registry: ${{ needs.build.outputs.registry }}

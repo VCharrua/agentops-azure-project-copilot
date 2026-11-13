@@ -1,0 +1,77 @@
+name: Teardown dev
+
+# Cost control: delete the whole dev environment. Manual, dev only, and requires typing the
+# resource group name to confirm. Soft-deleted Key Vault and Cognitive Services resources are
+# purged so their names and quota are released and the next deployment starts clean.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type rg-pdc-dev to confirm deleting the dev environment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  teardown:
+    name: Delete rg-pdc-dev
+    if: vars.AZURE_DEPLOY_ENABLED == 'true' && inputs.confirm == 'rg-pdc-dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RESOURCE_GROUP: rg-pdc-dev
+    steps:
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Record what will be purged
+        id: inventory
+        run: |
+          if [[ "$(az group exists --name "$RESOURCE_GROUP")" != "true" ]]; then
+            echo "Resource group ${RESOURCE_GROUP} does not exist. Nothing to do."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+          az keyvault list --resource-group "$RESOURCE_GROUP" --query '[].name' --output tsv > vaults.txt
+          az cognitiveservices account list --resource-group "$RESOURCE_GROUP" \
+            --query '[].[name, location]' --output tsv > accounts.txt
+          echo "Resources to delete:"
+          az resource list --resource-group "$RESOURCE_GROUP" --query '[].{name:name, type:type}' --output table
+      - name: Delete the resource group
+        if: steps.inventory.outputs.exists == 'true'
+        run: az group delete --name "$RESOURCE_GROUP" --yes
+      - name: Purge soft-deleted resources
+        if: steps.inventory.outputs.exists == 'true'
+        run: |
+          while read -r vault; do
+            [[ -n "$vault" ]] && az keyvault purge --name "$vault" || true
+          done < vaults.txt
+          while read -r name location; do
+            [[ -n "$name" ]] && az cognitiveservices account purge \
+              --name "$name" --resource-group "$RESOURCE_GROUP" --location "$location" || true
+          done < accounts.txt
+      - name: Summary
+        run: echo "Dev environment (${RESOURCE_GROUP}) deleted and purged." >> "$GITHUB_STEP_SUMMARY"
+
+  refused:
+    name: Confirmation did not match
+    if: inputs.confirm != 'rg-pdc-dev'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Confirmation text did not match 'rg-pdc-dev'. Nothing was deleted."
+          exit 1

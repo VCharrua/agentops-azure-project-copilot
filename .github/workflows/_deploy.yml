@@ -1,0 +1,157 @@
+name: Deploy (reusable)
+
+# One environment's deployment: promote the image, deploy, index, smoke-test, roll back on failure.
+# Called by cd.yml for dev, staging and prod with the SAME image digest.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: dev, staging or prod (must match a GitHub Environment)
+        required: true
+        type: string
+      digest:
+        description: Image digest (sha256:...) built once by cd.yml
+        required: true
+        type: string
+      source-registry:
+        description: Name of the registry the image was built into (the dev registry)
+        required: true
+        type: string
+    outputs:
+      url:
+        description: Public URL of the deployed app
+        value: ${{ jobs.deploy.outputs.url }}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      DIGEST: ${{ inputs.digest }}
+      SOURCE_REGISTRY: ${{ inputs.source-registry }}
+      REPOSITORY: project-delivery-copilot
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_DEPLOYER_OBJECT_ID: ${{ vars.AZURE_DEPLOYER_OBJECT_ID }}
+      BUDGET_CONTACT_EMAILS: ${{ vars.BUDGET_CONTACT_EMAILS }}
+      BUDGET_START_DATE: ${{ vars.BUDGET_START_DATE }}
+      ENTRA_AUTH_CLIENT_ID: ${{ vars.ENTRA_AUTH_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure login (OIDC, no stored secrets)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve registry and current image
+        id: state
+        run: |
+          resource_group="rg-pdc-${ENVIRONMENT}"
+          registry="$(az acr list --resource-group "$resource_group" --query '[0].name' --output tsv)"
+          if [[ -z "$registry" ]]; then
+            echo "::error::No registry in ${resource_group}. Run the 'Infrastructure' workflow for ${ENVIRONMENT} first."
+            exit 1
+          fi
+          previous="$(az containerapp show --resource-group "$resource_group" --name "ca-pdc-${ENVIRONMENT}" \
+            --query 'properties.template.containers[0].image' --output tsv)"
+          {
+            echo "registry=${registry}"
+            echo "image=${registry}.azurecr.io/${REPOSITORY}@${DIGEST}"
+            echo "previous=${previous}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Previous image: ${previous}"
+
+      - name: Promote the image by digest (no rebuild)
+        if: steps.state.outputs.registry != inputs.source-registry
+        env:
+          TARGET_REGISTRY: ${{ steps.state.outputs.registry }}
+        run: |
+          source_id="$(az acr show --name "$SOURCE_REGISTRY" --query id --output tsv)"
+          az acr import --name "$TARGET_REGISTRY" --registry "$source_id" \
+            --source "${REPOSITORY}@${DIGEST}" --image "${REPOSITORY}:${GITHUB_SHA}" --force
+          promoted="$(az acr repository show --name "$TARGET_REGISTRY" --image "${REPOSITORY}:${GITHUB_SHA}" --query digest --output tsv)"
+          if [[ "$promoted" != "$DIGEST" ]]; then
+            echo "::error::Digest changed during promotion: expected ${DIGEST}, got ${promoted}"
+            exit 1
+          fi
+
+      - name: Deploy
+        id: deploy
+        env:
+          IMAGE: ${{ steps.state.outputs.image }}
+        run: |
+          bash scripts/ci/deploy_infra.sh "$ENVIRONMENT" create "$IMAGE" > outputs.json
+          {
+            echo "url=$(jq -r '.containerAppUrl.value' outputs.json)"
+            echo "foundry=$(jq -r '.foundryProjectEndpoint.value' outputs.json)"
+            echo "search=$(jq -r '.searchEndpoint.value' outputs.json)"
+            echo "embedding=$(jq -r '.embeddingDeploymentName.value' outputs.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[azure]"
+
+      - name: Index the synthetic documents (idempotent)
+        env:
+          COPILOT_FOUNDRY_PROJECT_ENDPOINT: ${{ steps.deploy.outputs.foundry }}
+          COPILOT_FOUNDRY_EMBEDDING_DEPLOYMENT: ${{ steps.deploy.outputs.embedding }}
+          COPILOT_SEARCH_ENDPOINT: ${{ steps.deploy.outputs.search }}
+        run: python scripts/index_documents.py
+
+      - name: Smoke test (health gate)
+        id: smoke
+        env:
+          APP_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          args=(--base-url "$APP_URL" --expect-version "$GITHUB_SHA" --timeout 300)
+          if [[ -n "$ENTRA_AUTH_CLIENT_ID" ]]; then
+            token="$(az account get-access-token --resource "api://${ENTRA_AUTH_CLIENT_ID}" --query accessToken --output tsv)"
+            echo "::add-mask::${token}"
+            args+=(--token "$token")
+          fi
+          python scripts/smoke_test.py "${args[@]}"
+
+      - name: Roll back to the previous image
+        if: failure() && steps.state.outputs.previous != '' && (steps.deploy.conclusion == 'failure' || steps.smoke.conclusion == 'failure')
+        env:
+          PREVIOUS: ${{ steps.state.outputs.previous }}
+        run: |
+          echo "::warning::Deployment of ${DIGEST} to ${ENVIRONMENT} failed its health gate. Rolling back to ${PREVIOUS}."
+          bash scripts/ci/deploy_infra.sh "$ENVIRONMENT" create "$PREVIOUS" > /dev/null
+          {
+            echo "## Rolled back ${ENVIRONMENT}"
+            echo "The new image failed its health gate. The environment is running \`${PREVIOUS}\` again."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summary
+        if: success()
+        env:
+          APP_URL: ${{ steps.deploy.outputs.url }}
+          IMAGE: ${{ steps.state.outputs.image }}
+        run: |
+          {
+            echo "## Deployed to ${ENVIRONMENT}"
+            echo "- Image: \`${IMAGE}\`"
+            echo "- URL: ${APP_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
