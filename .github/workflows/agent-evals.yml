@@ -1,0 +1,147 @@
+name: Agent evals
+
+# Evaluates the agent against the versioned golden dataset and fails when a metric drops below
+# evals/thresholds.yaml.
+#
+#   offline tier: every PR and push. Deterministic, no cloud access. Gates retrieval, tool
+#                 plumbing, guardrails and the approval gate (including prompt-injection and
+#                 approval-bypass cases with a simulated compromised model).
+#   live tier:    nightly, on demand, and from the CD pipeline before promotion to staging.
+#                 Same dataset against the deployed dev environment with the real model, plus
+#                 LLM-judged groundedness. Requires the repository to be connected to Azure.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "evals/**"
+      - "data/synthetic/**"
+      - "pyproject.toml"
+      - ".github/workflows/agent-evals.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Which tier to run
+        type: choice
+        options: [offline, live]
+        default: offline
+  workflow_call:
+    inputs:
+      tier:
+        type: string
+        default: live
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.workflow }}-${{ github.ref }}-${{ inputs.tier || 'auto' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  offline:
+    name: Offline evals (deterministic)
+    if: inputs.tier != 'live'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Run golden dataset
+        run: >-
+          python -m copilot.evals.runner
+          --dataset evals/golden/v1.jsonl
+          --thresholds evals/thresholds.yaml
+          --out reports/evals
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: eval-report-offline
+          path: reports/evals
+      - name: Post results on the pull request
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- agent-evals -->';
+            const path = 'reports/evals/report.md';
+            if (!fs.existsSync(path)) return;
+            const body = `${marker}\n${fs.readFileSync(path, 'utf8')}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+  live:
+    name: Live evals (dev environment)
+    # Scheduled and on-demand runs are skipped until the repository is connected to Azure.
+    if: >-
+      vars.AZURE_DEPLOY_ENABLED == 'true' &&
+      (inputs.tier == 'live' || github.event_name == 'schedule')
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev,azure]"
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Resolve the dev environment
+        id: target
+        env:
+          ENTRA_AUTH_CLIENT_ID: ${{ vars.ENTRA_AUTH_CLIENT_ID }}
+        run: |
+          outputs="$(az deployment sub show --name pdc-dev --query properties.outputs --output json)"
+          {
+            echo "url=$(jq -r '.containerAppUrl.value' <<< "$outputs")"
+            echo "foundry=$(jq -r '.foundryProjectEndpoint.value' <<< "$outputs")"
+            echo "model=$(jq -r '.chatDeploymentName.value' <<< "$outputs")"
+          } >> "$GITHUB_OUTPUT"
+          if [[ -n "$ENTRA_AUTH_CLIENT_ID" ]]; then
+            token="$(az account get-access-token --resource "api://${ENTRA_AUTH_CLIENT_ID}" --query accessToken --output tsv)"
+            echo "::add-mask::${token}"
+            echo "COPILOT_EVAL_TOKEN=${token}" >> "$GITHUB_ENV"
+          fi
+      - name: Run golden dataset against the deployed agent
+        env:
+          COPILOT_FOUNDRY_PROJECT_ENDPOINT: ${{ steps.target.outputs.foundry }}
+          COPILOT_FOUNDRY_MODEL_DEPLOYMENT: ${{ steps.target.outputs.model }}
+          TARGET_URL: ${{ steps.target.outputs.url }}
+        run: >-
+          python -m copilot.evals.runner
+          --dataset evals/golden/v1.jsonl
+          --thresholds evals/thresholds.yaml
+          --out reports/evals
+          --target-url "$TARGET_URL"
+          --llm-judge
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: eval-report-live
+          path: reports/evals
