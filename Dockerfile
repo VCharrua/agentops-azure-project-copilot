@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build stage: resolve and install dependencies into a virtualenv -------------------------------
-FROM python:3.12-slim AS build
+FROM python:3.15-slim AS build
 
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /opt/venv
@@ -13,7 +13,7 @@ COPY src ./src
 RUN pip install ".[azure]"
 
 # ---- runtime stage: no build tools, non-root user ---------------------------------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 ARG APP_VERSION=dev
 LABEL org.opencontainers.image.title="project-delivery-copilot" \
