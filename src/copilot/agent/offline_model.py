@@ -155,31 +155,27 @@ class OfflineModel:
 
     def _compose_search_documents(self, question: str, output: dict[str, Any]) -> str:
         results: list[dict[str, Any]] = output.get("results", [])
-        note = ""
-        if output.get("withheld"):
-            note = (
-                f"\n\nNote: {output['withheld']} retrieved document(s) were withheld because they contain "
-                "instructions addressed to the assistant."
-            )
         if not results:
-            return "I could not find anything about that in the project documents." + note
+            return "I could not find anything about that in the project documents."
         query_tokens = set(tokenize(question))
-        scored: list[tuple[float, int, str, str]] = []
-        for rank, result in enumerate(results):
-            for sentence in _SENTENCE.split(result["content"]):
-                overlap = len(query_tokens & set(tokenize(sentence)))
-                if overlap:
-                    scored.append((overlap - 0.1 * rank, -len(scored), sentence.strip(), result["doc_id"]))
-        if not scored:
-            return "I could not find anything about that in the project documents." + note
-        top_score = max(score for score, *_ in scored)
-        best = sorted((item for item in scored if item[0] >= 0.6 * top_score), reverse=True)[:3]
-        ordered = sorted(best, key=lambda item: -item[1])
-        return (
-            "From the project documents: "
-            + " ".join(f"{sentence} [{doc_id}]" for _, _, sentence, doc_id in ordered)
-            + note
-        )
+        # (score, chunk rank, sentence index, sentence, doc_id) for every sentence of every result
+        sentences = [
+            (len(query_tokens & set(tokenize(sentence))) - 0.1 * rank, rank, index, sentence.strip(), result["doc_id"])
+            for rank, result in enumerate(results)
+            for index, sentence in enumerate(_SENTENCE.split(result["content"]))
+        ]
+        top_score = max(score for score, *_ in sentences)
+        if top_score <= 0:
+            return "I could not find anything about that in the project documents."
+        chosen = sorted((s for s in sentences if s[0] > 0 and s[0] >= 0.4 * top_score), reverse=True)[:3]
+        if len(chosen) < 3:
+            # Add the sentence that follows the best one: it usually carries the explanation.
+            _, rank, index, *_ = chosen[0]
+            follow_up = next((s for s in sentences if s[1] == rank and s[2] == index + 1), None)
+            if follow_up and follow_up not in chosen:
+                chosen.append(follow_up)
+        ordered = sorted(chosen, key=lambda s: (s[1], s[2]))
+        return "From the project documents: " + " ".join(f"{text} [{doc_id}]" for *_, text, doc_id in ordered)
 
     @staticmethod
     def _compose_list_projects(_question: str, output: dict[str, Any]) -> str:

@@ -137,6 +137,12 @@ class Orchestrator:
             guardrail_block_counter.add(1, {"stage": "output", "category": out_verdict.category or "unknown"})
             answer = OUTPUT_BLOCKED_MESSAGE
 
+        withheld_count = len({doc_id for entry in traces for doc_id in entry.withheld_doc_ids})
+        if withheld_count:
+            answer += (
+                f"\n\nSecurity notice: {withheld_count} retrieved document(s) were withheld because they contain "
+                "instructions addressed to the assistant. Treat them as suspicious."
+            )
         if pending:
             ids = ", ".join(action.id for action in pending)
             answer += (

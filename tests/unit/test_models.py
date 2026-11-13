@@ -124,8 +124,8 @@ def test_offline_model_composition_edge_cases(repo: ProjectRepository, container
     assert "unreadable" in model._compose("q", Message(role="tool", content="not json", tool_name="x"))
     assert "could not complete" in model._compose("q", Message(role="tool", content='{"error": "nope"}', tool_name="x"))
     assert model._compose("q", Message(role="tool", content='{"a": 1}', tool_name="unknown_tool")) == '{"a": 1}'
-    no_overlap = {"results": [{"content": "Unrelated sentence.", "doc_id": "D"}], "withheld": 1}
-    assert "withheld" in model._compose_search_documents("zebra", no_overlap)
+    no_overlap = {"results": [{"content": "Unrelated sentence.", "doc_id": "D"}], "withheld": 0}
+    assert "could not find anything" in model._compose_search_documents("zebra", no_overlap)
 
 
 # -- Foundry Responses adapter, against a fake OpenAI client ----------------------------------------
