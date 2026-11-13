@@ -9,14 +9,21 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && echo "Dependency refresh: ${DEPENDENCY_REFRESH}"
-RUN python -m venv /opt/venv
+#- RUN python -m venv /opt/venv
+# The venv is created without pip, so pip and its bundled SBOM never reach the runtime image.
+RUN python -m venv --without-pip /opt/venv
+
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN pip install --upgrade pip setuptools msgpack urllib3 \
-    && pip install ".[azure]"
+#- RUN pip install --upgrade pip setuptools msgpack urllib3 \
+#-    && pip install ".[azure]"
+
+# Install into the venv using the build stage's own pip (urllib3 etc. resolve to current releases).
+RUN /usr/local/bin/pip --python /opt/venv/bin/python install ".[azure]"
+
 
 # ---- runtime stage: no build tools, non-root user ---------------------------------------------------
 FROM python:3.15-slim AS runtime
@@ -38,10 +45,14 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
-    && /usr/local/bin/python -m pip uninstall --yes setuptools msgpack urllib3 \
+    && /usr/local/bin/python -m pip uninstall --yes pip \
     && echo "Dependency refresh: ${DEPENDENCY_REFRESH}"
+
+#-    && /usr/local/bin/python -m pip uninstall --yes setuptools msgpack urllib3 \
+
+
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin copilot
-RUN pip install --upgrade pip setuptools msgpack urllib3
+#- RUN pip install --upgrade pip setuptools msgpack urllib3
 WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 # The synthetic dataset ships in the image: structured data is read from it in every mode, and the
