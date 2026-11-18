@@ -14,17 +14,12 @@ promotion of one image through dev, staging and production with rollback.
 
 
 
-> **Status, stated plainly.** Everything in this repository runs and is tested locally with mocked
-> Azure services. The Azure paths (Bicep, the Azure adapters, the deployment workflows) compile,
-> lint and are unit-tested against fakes, but have **not yet been validated on Azure**. Nothing here
-> has been deployed. See [What is verified and what is not](#what-is-verified-and-what-is-not).
+> **Status, stated plainly.** Everything in this repository runs and is tested locally with mocked Azure services. The Azure paths (Bicep, the Azure adapters, the deployment workflows) compile, lint and are unit-tested against fakes, but have **not yet been validated on Azure**. Nothing here has been deployed. See [What is verified and what is not](#what-is-verified-and-what-is-not).
 >
-> All data is synthetic. "Alvora Construction", its clients, people and projects are invented, and
-> this is not a client project.
+> This repository is a rebuild of **v1**, an earlier system developed for a construction company, which was deployed to production and remains live there. v1's objective was to test and evaluate the performance of AI optimizations made by Claude Code agents using the Fable 5.2 model. The v1 production system is proprietary and not open source, and the company has no connection to this repository.
 >
-> This project is a variant of an earlier project developed for and deployed in production by a
-> real construction company, whose objective was to test and evaluate the performance of AI
-> optimizations made by Claude Code agents using the Fable 5.2 model.
+> All data here is synthetic. "Alvora Construction", its clients, people and projects are invented and bear no relation to the company behind v1. This repository is not a client deliverable and contains no client data.
+
 
 ## Architecture
 
